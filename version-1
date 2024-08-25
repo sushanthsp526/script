@@ -1,0 +1,414 @@
+// const SERVER_URL = "http://192.168.0.107:5000";
+const SERVER_URL = "https://radix-backend.vercel.app";
+
+const patterns = [
+  /\border.*confirmed\b/i,
+  /\bpayment.*successful\b/i,
+  /\border.*successful\b/i,
+  /\bpayment.*confirmed\b/i,
+  /\bbooking.*confirmed\b/i,
+  /\bbooking.*successful\b/i,
+  /\bbooking\s+.*successful\b/i,
+  /\bbooking\s+successful\b/i,
+  /\bsuccessfully\s+booked\b/i,
+  /\border.*completed\b/i,
+  /\border.*paid\b/i,
+  /\btransaction.*approved\b/i,
+  /\btransaction.*successful\b/i,
+  /\bpayment.*completed\b/i,
+  /\bbooking.*complete\b/i,
+  /\bbooking.*approved\b/i,
+  /\border.*processed\b/i,
+  /\bpayment.*processed\b/i,
+  /\bbooking.*processed\b/i,
+];
+
+const negativePatterns = [
+  /\bnot\s+successful\b/i,
+  /\bfailed\b/i,
+  /\border.*rejected\b/i,
+  /\bpayment.*failed\b/i,
+  /\bbooking.*failed\b/i,
+  /\btransaction.*failed\b/i,
+  /\border.*cancelled\b/i,
+  /\bpayment.*cancelled\b/i,
+  /\bbooking.*cancelled\b/i,
+  /\bdeclined\b/i,
+  /\bunsuccessful\b/i,
+  /\btransaction.*declined\b/i,
+  /\border.*unsuccessful\b/i,
+  /\bpayment.*declined\b/i,
+  /\bpayment.*not\s+completed\b/i,
+  /\bpayment\s+issue\b/i,
+  /\bbooking.*declined\b/i,
+  /\bbooking\s+unsuccessful\b/i,
+  /\border.*issue\b/i,
+  /\bproblem.*order\b/i,
+  /\bproblem.*payment\b/i,
+  /\bproblem.*booking\b/i,
+  /\bissue.*transaction\b/i,
+  /\bfailed\s+to\s+process\b/i,
+  /\bwas\s+not\s+completed\b/i,
+  /\bcould\s+not\s+be\s+processed\b/i,
+  /\bprocessing\s+error\b/i,
+];
+
+// Function to extract various IDs from the HTML
+const extractId = (entireHTML) => {
+  const idPatterns = [
+    /\border\s?id[:\s]?\s?(\w+)\b/i,
+    /\btransaction[:\s]?\s?(\w+)\b/i,
+    /\btransaction\s?id[:\s]?\s?(\w+)\b/i,
+    /\border\s?number[:\s]?\s?(\w+)\b/i,
+    /\btransaction\s?number[:\s]?\s?(\w+)\b/i,
+    /\border\s?ref[:\s]?\s?(\w+)\b/i,
+    /\btransaction\s?ref[:\s]?\s?(\w+)\b/i,
+    /\border\s?id[:\s]?\s?(\d+)\b/i,
+    /\btransaction\s?id[:\s]?\s?(\d+)\b/i,
+    /\btxn\s?id[:\s]?\s?(\w+)\b/i,
+    /\btxn\s?number[:\s]?\s?(\w+)\b/i,
+    /\bpayment\s?ref[:\s]?\s?(\w+)\b/i,
+    /\bpayment\s?id[:\s]?\s?(\w+)\b/i,
+    /\bpayment\s?number[:\s]?\s?(\w+)\b/i,
+    /\bref\s?id[:\s]?\s?(\w+)\b/i,
+    /\bref\s?number[:\s]?\s?(\w+)\b/i,
+    /\border\s?code[:\s]?\s?(\w+)\b/i,
+    /\btransaction\s?code[:\s]?\s?(\w+)\b/i,
+    /\border\s?confirmation\s?number[:\s]?\s?(\w+)\b/i,
+    /\btransaction\s?confirmation\s?number[:\s]?\s?(\w+)\b/i,
+    /\btransaction\s?(\d+)\b/i,
+    /\btxn\s?(\d+)\b/i,
+    /\btx\s?(\w+)\b/i,
+  ];
+
+  for (const pattern of idPatterns) {
+    const match = entireHTML.match(pattern);
+    if (match) {
+      return match[match.length - 1];
+    }
+  }
+  return "";
+};
+
+// Function to extract publisher and ad IDs from URL parameters
+const extractPublisherAndAdId = () => {
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const pa_id = urlParams.get("pa_id") || urlParams.get("utm_id") || "";
+    const numberStr = pa_id?.toString();
+    const [part1, part2] = numberStr?.split("_");
+
+    const num1 = parseInt(part1, 10);
+    const num2 = parseInt(part2, 10);
+
+    return { publisherId: part1 || "", adId: part2 || "" };
+  } catch (error) {
+    console.error("Error extracting publisher and ad IDs:", error);
+    return { publisherId: "", adId: "" };
+  }
+};
+
+// Function to store initial data in local storage
+const storeInitialData = (organizationId) => {
+  try {
+    const { publisherId, adId } = extractPublisherAndAdId();
+    const initialUrl = window.location.href;
+    const initialDateTime = new Date().toLocaleString();
+    const existingDateTime = localStorage.getItem("initialDateTime");
+    const previousPath = localStorage.getItem("previousPath") || "";
+    const currentDateTime = new Date();
+
+    if (existingDateTime) {
+      const diffInHours =
+        (currentDateTime - new Date(existingDateTime)) / (1000 * 60 * 60);
+      if (diffInHours >= 24) {
+        localStorage.setItem("publisherId", publisherId || "");
+        localStorage.setItem("adId", adId || "");
+        localStorage.setItem("initialUrl", initialUrl || "");
+        localStorage.setItem("initialDateTime", initialDateTime || "");
+        localStorage.setItem("organizationId", organizationId || "");
+        localStorage.setItem("previousPath", window.location.pathname || "");
+      } else if (adId && localStorage.getItem("adId") !== adId) {
+        localStorage.setItem("publisherId", publisherId || "");
+        localStorage.setItem("adId", adId || "");
+        localStorage.setItem("initialUrl", initialUrl || "");
+        localStorage.setItem("initialDateTime", initialDateTime || "");
+        localStorage.setItem("organizationId", organizationId || "");
+        localStorage.setItem("previousPath", window.location.pathname || "");
+      } else if (adId && publisherId && organizationId) {
+        localStorage.setItem("publisherId", publisherId || "");
+        localStorage.setItem("adId", adId || "");
+        localStorage.setItem("initialUrl", initialUrl || "");
+        localStorage.setItem("organizationId", organizationId || "");
+        localStorage.setItem("previousPath", window.location.pathname || "");
+      }
+    } else if (adId && publisherId && organizationId) {
+      localStorage.setItem("publisherId", publisherId || "");
+      localStorage.setItem("adId", adId || "");
+      localStorage.setItem("initialUrl", initialUrl || "");
+      localStorage.setItem("initialDateTime", initialDateTime || "");
+      localStorage.setItem("organizationId", organizationId || "");
+      localStorage.setItem("previousPath", window.location.pathname || "");
+    }
+
+    if (adId) {
+      fetch(`${SERVER_URL}/v1/script/get-url`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          AccessToken: "UmZpVGZxdzFHZ3g5RlFqSm5aeGtYd3lPWEpTUGhEjkl=",
+        },
+        body: JSON.stringify({ ad_id: adId || "" }),
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data?.status) {
+            localStorage.setItem(
+              "conversionUrl",
+              JSON.stringify(data?.data?.script_target_url) || ""
+            );
+          }
+        })
+        .catch((error) => {
+          console.error("Error fetching conversion URL:", error);
+        });
+    }
+  } catch (error) {
+    console.error("Error storing initial data:", error);
+  }
+};
+
+// Function to install script if not already installed
+const installScript = (organizationId) => {
+  try {
+    const scriptInstalled = localStorage.getItem("scriptInstalled");
+
+    if (!scriptInstalled && organizationId) {
+      fetch(`${SERVER_URL}/v1/script/install-script`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          AccessToken: "UmZpVGZxdzFHZ3g5RlFqSm5aeGtYd3lPWEpTUGhEjkl=",
+        },
+        body: JSON.stringify({ organization_id: organizationId || "" }),
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data?.status) {
+            localStorage.setItem("scriptInstalled", JSON.stringify(true));
+          }
+        })
+        .catch((error) => {
+          console.error("Error installing script:", error);
+        });
+    }
+  } catch (error) {
+    console.error("Error in installScript function:", error);
+  }
+};
+
+// Function to send script logs
+const sendScriptLogs = ({
+  event = null,
+  target = null,
+  targetName = null,
+  log_type,
+  organization_id,
+} = {}) => {
+  try {
+    const publisherId = localStorage.getItem("publisherId") || "";
+    const adId = localStorage.getItem("adId") || "";
+    const timeSpentDateTime = localStorage.getItem("timeSpentDateTime") || "";
+    const initialUrl = localStorage.getItem("initialUrl") || "";
+    const previousPath = localStorage.getItem("previousPath") || "";
+    const currentPath = window.location.pathname || "";
+    const url = window.location.href || "";
+
+    const currentDateTime = new Date();
+    const timeSpent = timeSpentDateTime
+      ? (currentDateTime - new Date(timeSpentDateTime)) / (1000 * 60)
+      : 0;
+    if (adId && publisherId && organization_id) {
+      fetch(`${SERVER_URL}/v1/script/logs`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          AccessToken: "UmZpVGZxdzFHZ3g5RlFqSm5aeGtYd3lPWEpTUGhEjkl=",
+        },
+        body: JSON.stringify({
+          organization_id: organization_id || "",
+          publisher_id: publisherId,
+          ad_id: adId,
+          client_date_time: new Date(),
+          event_category: event || "",
+          target: target || "",
+          target_name: targetName || "",
+          url,
+          path: currentPath,
+          initial_url: initialUrl,
+          final_url: url,
+          time_spent: timeSpent,
+          order_id: extractId(document.documentElement.outerHTML) || "",
+          transaction_id: extractId(document.documentElement.outerHTML) || "",
+          customer_name: "",
+          target_achieved: "",
+          log_type: log_type || "",
+        }),
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data?.status) {
+            console.log(data);
+          }
+        })
+        .catch((error) => {
+          console.error("Error sending script logs:", error);
+        });
+
+      if (previousPath !== currentPath) {
+        localStorage.setItem("previousPath", currentPath);
+        localStorage.setItem(
+          "timeSpentDateTime",
+          currentDateTime.toLocaleString()
+        );
+      }
+    }
+  } catch (error) {
+    console.error("Error sending script logs:", error);
+  }
+};
+
+// Function to send events
+const sendEvents = (event, target, targetName, organization_id) => {
+  try {
+    sendScriptLogs({
+      event,
+      target,
+      targetName,
+      log_type: "events",
+      organization_id,
+    });
+  } catch (error) {
+    console.error("Error sending events:", error);
+  }
+};
+
+// Function to handle changes on the page
+const commonFunction = (entireHTML, organization_id, conversionUrl) => {
+  console.log("common function");
+  try {
+    if (window.location.href === conversionUrl) {
+      const patternFound = patterns.some((pattern) => pattern.test(entireHTML));
+
+      if (patternFound) {
+        const negativePatternFound = negativePatterns.some((pattern) =>
+          pattern.test(entireHTML)
+        );
+        if (!negativePatternFound) {
+          sendScriptLogs({
+            orderId: extractId(entireHTML) || "",
+            log_type: "conversion",
+            organization_id,
+          });
+        } else {
+          sendScriptLogs({ log_type: "ignored", organization_id });
+        }
+      } else {
+        sendScriptLogs({ log_type: "ignored", organization_id });
+      }
+    }
+  } catch (error) {
+    console.error("Error in commonFunction:", error);
+  }
+};
+
+// Function to observe changes on the page
+const observeChanges = (organizationId, conversionUrl) => {
+  try {
+    console.log("observe");
+    const body = document.querySelector("body");
+
+    const observer = new MutationObserver(() => {
+      const entireHTML = document.documentElement.outerHTML.toLowerCase();
+      console.log("html");
+
+      commonFunction(entireHTML, organizationId, conversionUrl);
+
+      if (window.location.href !== conversionUrl) {
+        observer.disconnect();
+      }
+    });
+
+    observer.observe(body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      characterData: true,
+    });
+
+    // Initial check of the HTML content
+    const entireHTML = document.documentElement.outerHTML.toLowerCase();
+    console.log("Initial HTML check");
+    commonFunction(entireHTML, organizationId, conversionUrl);
+
+    return observer;
+  } catch (error) {
+    console.error("Error observing changes:", error);
+  }
+};
+
+// Function to handle events
+const handleEvent = (event, organizationId) => {
+  try {
+    if (event.target?.tagName === "BUTTON") {
+      const buttonName = event.target?.innerText || event.target?.name || "";
+      sendEvents(
+        event.type,
+        event.target?.tagName || "",
+        buttonName,
+        organizationId
+      );
+    }
+  } catch (error) {
+    console.error("Error handling event:", error);
+  }
+};
+
+function handleUrlChange(organization_id) {
+  const conversionUrl = localStorage.getItem("conversionUrl");
+  
+  if (window.location.href === conversionUrl) {
+    observeChanges(organization_id, conversionUrl);
+  } else {
+    sendScriptLogs({ log_type: "path", organization_id });
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  // const scriptTag = document.querySelector('script[src="script.js"]');
+  // const organizationId = scriptTag.getAttribute("organization-id");
+  // const stopListening = initDOMChangeListener(organizationId);
+
+  const scriptElement = document.querySelector("script[organization-id]");
+  const organization_id = scriptElement.getAttribute("organization-id");
+
+  if (organization_id) {
+    storeInitialData(organization_id);
+    installScript(organization_id);
+
+    document.addEventListener("click", (e) => handleEvent(e, organization_id));
+    document.addEventListener("submit", (e) => handleEvent(e, organization_id));
+
+    sendScriptLogs({ log_type: "path", organization_id });
+
+    // Simulate URL change event
+    const urlChangeEmitter = {
+      on: (event, callback) => {
+        // Mock URL change handling (for demo purposes)
+        window.addEventListener("hashchange", callback);
+      },
+    };
+
+    urlChangeEmitter.on("change", () => handleUrlChange(organization_id));
+  }
+});
